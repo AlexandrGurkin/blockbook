@@ -830,31 +830,31 @@ func (w *Worker) GetAddress(address string, page int, txsOnPage int, option Acco
 		page = 0
 	}
 	var (
-		ba                       *db.AddrBalance
-		tokens                   []Token
-		erc20c                   *bchain.Erc20Contract
-		txm                      []string
-		txs                      []*Tx
-		txids                    []string
-		pg                       Paging
-		uBalSat                  big.Int
-		totalReceived, totalSent *big.Int
-		nonce                    string
-		unconfirmedTxs           int
-		nonTokenTxs              int
-		totalResults             int
+		ba *db.AddrBalance
+		//tokens                   []Token
+		//erc20c                   *bchain.Erc20Contract
+		txm     []string
+		txs     []*Tx
+		txids   []string
+		pg      Paging
+		uBalSat big.Int
+		//totalReceived, totalSent *big.Int
+		//nonce                    string
+		unconfirmedTxs int
+		//nonTokenTxs              int
+		totalResults int
 	)
 	addrDesc, address, err := w.getAddrDescAndNormalizeAddress(address)
 	if err != nil {
 		return nil, err
 	}
 	if w.chainType == bchain.ChainEthereumType {
-		var n uint64
-		ba, tokens, erc20c, n, nonTokenTxs, totalResults, err = w.getEthereumTypeAddressBalances(addrDesc, option, filter)
-		if err != nil {
-			return nil, err
-		}
-		nonce = strconv.Itoa(int(n))
+		//var n uint64
+		//ba, tokens, erc20c, n, nonTokenTxs, totalResults, err = w.getEthereumTypeAddressBalances(addrDesc, option, filter)
+		//if err != nil {
+		//	return nil, err
+		//}
+		//nonce = strconv.Itoa(int(n))
 	} else {
 		// ba can be nil if the address is only in mempool!
 		ba, err = w.db.GetAddrDescBalance(addrDesc, db.AddressBalanceDetailNoUTXO)
@@ -941,24 +941,24 @@ func (w *Worker) GetAddress(address string, page int, txsOnPage int, option Acco
 		}
 	}
 	if w.chainType == bchain.ChainBitcoinType {
-		totalReceived = ba.ReceivedSat()
-		totalSent = &ba.SentSat
+		//totalReceived = ba.ReceivedSat()
+		//totalSent = &ba.SentSat
 	}
 	r := &Address{
-		Paging:                pg,
-		AddrStr:               address,
-		BalanceSat:            (*Amount)(&ba.BalanceSat),
-		TotalReceivedSat:      (*Amount)(totalReceived),
-		TotalSentSat:          (*Amount)(totalSent),
-		Txs:                   int(ba.Txs),
-		NonTokenTxs:           nonTokenTxs,
+		Paging: pg,
+		//AddrStr:               address,
+		BalanceSat: (*Amount)(&ba.BalanceSat),
+		//TotalReceivedSat:      (*Amount)(totalReceived),
+		//TotalSentSat:          (*Amount)(totalSent),
+		//Txs:                   int(ba.Txs),
+		//NonTokenTxs:           nonTokenTxs,
 		UnconfirmedBalanceSat: (*Amount)(&uBalSat),
-		UnconfirmedTxs:        unconfirmedTxs,
-		Transactions:          txs,
-		Txids:                 txids,
-		Tokens:                tokens,
-		Erc20Contract:         erc20c,
-		Nonce:                 nonce,
+		//UnconfirmedTxs:        unconfirmedTxs,
+		//Transactions:          txs,
+		//Txids:                 txids,
+		//Tokens:                tokens,
+		//Erc20Contract:         erc20c,
+		//Nonce:                 nonce,
 	}
 	glog.Info("GetAddress ", address, ", ", time.Since(start))
 	return r, nil
