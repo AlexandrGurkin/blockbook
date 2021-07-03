@@ -251,13 +251,13 @@ type AddressFilter struct {
 // Address holds information about address and its transactions
 type Address struct {
 	Paging
-	AddrStr               string                `json:"address"`
+	AddrStr               string                `json:"address,omitempty"`
 	BalanceSat            *Amount               `json:"balance"`
 	TotalReceivedSat      *Amount               `json:"totalReceived,omitempty"`
 	TotalSentSat          *Amount               `json:"totalSent,omitempty"`
 	UnconfirmedBalanceSat *Amount               `json:"unconfirmedBalance"`
-	UnconfirmedTxs        int                   `json:"unconfirmedTxs"`
-	Txs                   int                   `json:"txs"`
+	UnconfirmedTxs        int                   `json:"unconfirmedTxs,omitempty"`
+	Txs                   int                   `json:"txs,omitempty"`
 	NonTokenTxs           int                   `json:"nonTokenTxs,omitempty"`
 	Transactions          []*Tx                 `json:"transactions,omitempty"`
 	Txids                 []string              `json:"txids,omitempty"`
