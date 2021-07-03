@@ -830,6 +830,148 @@ func (w *Worker) GetAddress(address string, page int, txsOnPage int, option Acco
 		page = 0
 	}
 	var (
+		ba                       *db.AddrBalance
+		tokens                   []Token
+		erc20c                   *bchain.Erc20Contract
+		txm                      []string
+		txs                      []*Tx
+		txids                    []string
+		pg                       Paging
+		uBalSat                  big.Int
+		totalReceived, totalSent *big.Int
+		nonce                    string
+		unconfirmedTxs           int
+		nonTokenTxs              int
+		totalResults             int
+	)
+	addrDesc, address, err := w.getAddrDescAndNormalizeAddress(address)
+	if err != nil {
+		return nil, err
+	}
+	if w.chainType == bchain.ChainEthereumType {
+		var n uint64
+		ba, tokens, erc20c, n, nonTokenTxs, totalResults, err = w.getEthereumTypeAddressBalances(addrDesc, option, filter)
+		if err != nil {
+			return nil, err
+		}
+		nonce = strconv.Itoa(int(n))
+	} else {
+		// ba can be nil if the address is only in mempool!
+		ba, err = w.db.GetAddrDescBalance(addrDesc, db.AddressBalanceDetailNoUTXO)
+		if err != nil {
+			return nil, NewAPIError(fmt.Sprintf("Address not found, %v", err), true)
+		}
+		if ba != nil {
+			// totalResults is known only if there is no filter
+			if filter.Vout == AddressFilterVoutOff && filter.FromHeight == 0 && filter.ToHeight == 0 {
+				totalResults = int(ba.Txs)
+			} else {
+				totalResults = -1
+			}
+		}
+	}
+	// if there are only unconfirmed transactions, there is no paging
+	if ba == nil {
+		ba = &db.AddrBalance{}
+		page = 0
+	}
+	// process mempool, only if toHeight is not specified
+	if filter.ToHeight == 0 && !filter.OnlyConfirmed {
+		txm, err = w.getAddressTxids(addrDesc, true, filter, maxInt)
+		if err != nil {
+			return nil, errors.Annotatef(err, "getAddressTxids %v true", addrDesc)
+		}
+		for _, txid := range txm {
+			tx, err := w.GetTransaction(txid, false, true)
+			// mempool transaction may fail
+			if err != nil || tx == nil {
+				glog.Warning("GetTransaction in mempool: ", err)
+			} else {
+				// skip already confirmed txs, mempool may be out of sync
+				if tx.Confirmations == 0 {
+					unconfirmedTxs++
+					uBalSat.Add(&uBalSat, tx.getAddrVoutValue(addrDesc))
+					// ethereum has a different logic - value not in input and add maximum possible fees
+					if w.chainType == bchain.ChainEthereumType {
+						uBalSat.Sub(&uBalSat, tx.getAddrEthereumTypeMempoolInputValue(addrDesc))
+					} else {
+						uBalSat.Sub(&uBalSat, tx.getAddrVinValue(addrDesc))
+					}
+					if page == 0 {
+						if option == AccountDetailsTxidHistory {
+							txids = append(txids, tx.Txid)
+						} else if option >= AccountDetailsTxHistoryLight {
+							txs = append(txs, tx)
+						}
+					}
+				}
+			}
+		}
+	}
+	// get tx history if requested by option or check mempool if there are some transactions for a new address
+	if option >= AccountDetailsTxidHistory && filter.Vout != AddressFilterVoutQueryNotNecessary {
+		txc, err := w.getAddressTxids(addrDesc, false, filter, (page+1)*txsOnPage)
+		if err != nil {
+			return nil, errors.Annotatef(err, "getAddressTxids %v false", addrDesc)
+		}
+		bestheight, _, err := w.db.GetBestBlock()
+		if err != nil {
+			return nil, errors.Annotatef(err, "GetBestBlock")
+		}
+		var from, to int
+		pg, from, to, page = computePaging(len(txc), page, txsOnPage)
+		if len(txc) >= txsOnPage {
+			if totalResults < 0 {
+				pg.TotalPages = -1
+			} else {
+				pg, _, _, _ = computePaging(totalResults, page, txsOnPage)
+			}
+		}
+		for i := from; i < to; i++ {
+			txid := txc[i]
+			if option == AccountDetailsTxidHistory {
+				txids = append(txids, txid)
+			} else {
+				tx, err := w.txFromTxid(txid, bestheight, option, nil)
+				if err != nil {
+					return nil, err
+				}
+				txs = append(txs, tx)
+			}
+		}
+	}
+	if w.chainType == bchain.ChainBitcoinType {
+		totalReceived = ba.ReceivedSat()
+		totalSent = &ba.SentSat
+	}
+	r := &Address{
+		Paging:                pg,
+		AddrStr:               address,
+		BalanceSat:            (*Amount)(&ba.BalanceSat),
+		TotalReceivedSat:      (*Amount)(totalReceived),
+		TotalSentSat:          (*Amount)(totalSent),
+		Txs:                   int(ba.Txs),
+		NonTokenTxs:           nonTokenTxs,
+		UnconfirmedBalanceSat: (*Amount)(&uBalSat),
+		UnconfirmedTxs:        unconfirmedTxs,
+		Transactions:          txs,
+		Txids:                 txids,
+		Tokens:                tokens,
+		Erc20Contract:         erc20c,
+		Nonce:                 nonce,
+	}
+	glog.Info("GetAddress ", address, ", ", time.Since(start))
+	return r, nil
+}
+
+// GetLiteAddress computes address value and gets transactions for given address for ag_fix branch
+func (w *Worker) GetLiteAddress(address string, page int, txsOnPage int, option AccountDetails, filter *AddressFilter) (*LiteAddress, error) {
+	start := time.Now()
+	page--
+	if page < 0 {
+		page = 0
+	}
+	var (
 		ba *db.AddrBalance
 		//tokens                   []Token
 		//erc20c                   *bchain.Erc20Contract
@@ -944,21 +1086,10 @@ func (w *Worker) GetAddress(address string, page int, txsOnPage int, option Acco
 		//totalReceived = ba.ReceivedSat()
 		//totalSent = &ba.SentSat
 	}
-	r := &Address{
-		Paging: pg,
-		//AddrStr:               address,
-		BalanceSat: (*Amount)(&ba.BalanceSat),
-		//TotalReceivedSat:      (*Amount)(totalReceived),
-		//TotalSentSat:          (*Amount)(totalSent),
-		//Txs:                   int(ba.Txs),
-		//NonTokenTxs:           nonTokenTxs,
+	r := &LiteAddress{
+		Paging:                pg,
+		BalanceSat:            (*Amount)(&ba.BalanceSat),
 		UnconfirmedBalanceSat: (*Amount)(&uBalSat),
-		//UnconfirmedTxs:        unconfirmedTxs,
-		//Transactions:          txs,
-		//Txids:                 txids,
-		//Tokens:                tokens,
-		//Erc20Contract:         erc20c,
-		//Nonce:                 nonce,
 	}
 	glog.Info("GetAddress ", address, ", ", time.Since(start))
 	return r, nil

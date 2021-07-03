@@ -251,13 +251,13 @@ type AddressFilter struct {
 // Address holds information about address and its transactions
 type Address struct {
 	Paging
-	AddrStr               string                `json:"address,omitempty"`
+	AddrStr               string                `json:"address"`
 	BalanceSat            *Amount               `json:"balance"`
 	TotalReceivedSat      *Amount               `json:"totalReceived,omitempty"`
 	TotalSentSat          *Amount               `json:"totalSent,omitempty"`
 	UnconfirmedBalanceSat *Amount               `json:"unconfirmedBalance"`
-	UnconfirmedTxs        int                   `json:"unconfirmedTxs,omitempty"`
-	Txs                   int                   `json:"txs,omitempty"`
+	UnconfirmedTxs        int                   `json:"unconfirmedTxs"`
+	Txs                   int                   `json:"txs"`
 	NonTokenTxs           int                   `json:"nonTokenTxs,omitempty"`
 	Transactions          []*Tx                 `json:"transactions,omitempty"`
 	Txids                 []string              `json:"txids,omitempty"`
@@ -265,6 +265,16 @@ type Address struct {
 	UsedTokens            int                   `json:"usedTokens,omitempty"`
 	Tokens                []Token               `json:"tokens,omitempty"`
 	Erc20Contract         *bchain.Erc20Contract `json:"erc20Contract,omitempty"`
+	// helpers for explorer
+	Filter        string              `json:"-"`
+	XPubAddresses map[string]struct{} `json:"-"`
+}
+
+// LiteAddress holds information about address and its transactions for ag_fix branch
+type LiteAddress struct {
+	Paging
+	BalanceSat            *Amount `json:"balance"`
+	UnconfirmedBalanceSat *Amount `json:"unconfirmedBalance"`
 	// helpers for explorer
 	Filter        string              `json:"-"`
 	XPubAddresses map[string]struct{} `json:"-"`
