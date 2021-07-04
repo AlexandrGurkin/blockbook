@@ -272,7 +272,6 @@ type Address struct {
 
 // LiteAddress holds information about address and its transactions for ag_fix branch
 type LiteAddress struct {
-	Paging
 	BalanceSat            *Amount `json:"balance"`
 	UnconfirmedBalanceSat *Amount `json:"unconfirmedBalance"`
 	// helpers for explorer

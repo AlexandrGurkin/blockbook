@@ -181,6 +181,7 @@ func (s *PublicServer) ConnectFullPublicInterface() {
 	serveMux.HandleFunc(path+"api/v2/tx-specific/", s.jsonHandler(s.apiTxSpecific, apiV2))
 	serveMux.HandleFunc(path+"api/v2/tx/", s.jsonHandler(s.apiTx, apiV2))
 	serveMux.HandleFunc(path+"api/v2/address/", s.jsonHandler(s.apiAddress, apiV2))
+	serveMux.HandleFunc(path+"api/v2/lite-address/", s.jsonHandler(s.apiAddress, apiV2))
 	serveMux.HandleFunc(path+"api/v2/xpub/", s.jsonHandler(s.apiXpub, apiV2))
 	serveMux.HandleFunc(path+"api/v2/utxo/", s.jsonHandler(s.apiUtxo, apiV2))
 	serveMux.HandleFunc(path+"api/v2/block/", s.jsonHandler(s.apiBlock, apiV2))
@@ -1011,14 +1012,32 @@ func (s *PublicServer) apiAddress(r *http.Request, apiVersion int) (interface{},
 	if len(addressParam) == 0 {
 		return nil, api.NewAPIError("Missing address", true)
 	}
+	var address *api.Address
+	var err error
+	s.metrics.ExplorerViews.With(common.Labels{"action": "api-address"}).Inc()
+	page, pageSize, details, filter, _, _ := s.getAddressQueryParams(r, api.AccountDetailsTxidHistory, txsInAPI)
+	address, err = s.api.GetAddress(addressParam, page, pageSize, details, filter)
+	if err == nil && apiVersion == apiV1 {
+		return s.api.AddressToV1(address), nil
+	}
+	return address, err
+}
+
+func (s *PublicServer) apiLiteAddress(r *http.Request, apiVersion int) (interface{}, error) {
+	var addressParam string
+	i := strings.LastIndexByte(r.URL.Path, '/')
+	if i > 0 {
+		addressParam = r.URL.Path[i+1:]
+	}
+	if len(addressParam) == 0 {
+		return nil, api.NewAPIError("Missing address", true)
+	}
 	var address *api.LiteAddress
 	var err error
 	s.metrics.ExplorerViews.With(common.Labels{"action": "api-address"}).Inc()
 	page, pageSize, details, filter, _, _ := s.getAddressQueryParams(r, api.AccountDetailsTxidHistory, txsInAPI)
 	address, err = s.api.GetLiteAddress(addressParam, page, pageSize, details, filter)
-	if err == nil && apiVersion == apiV1 {
-		return s.api.LiteAddressToV1(address), nil
-	}
+
 	return address, err
 }
 

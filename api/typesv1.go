@@ -192,16 +192,6 @@ func (w *Worker) AddressToV1(a *Address) *AddressV1 {
 	}
 }
 
-// LiteAddressToV1 converts Address to AddressV1
-func (w *Worker) LiteAddressToV1(a *LiteAddress) *AddressV1 {
-	d := w.chainParser.AmountDecimals()
-	return &AddressV1{
-		Balance:            a.BalanceSat.DecimalString(d),
-		Paging:             a.Paging,
-		UnconfirmedBalance: a.UnconfirmedBalanceSat.DecimalString(d),
-	}
-}
-
 // AddressUtxoToV1 converts []AddressUtxo to []AddressUtxoV1
 func (w *Worker) AddressUtxoToV1(au Utxos) []AddressUtxoV1 {
 	d := w.chainParser.AmountDecimals()
