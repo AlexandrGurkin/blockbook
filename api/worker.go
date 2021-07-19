@@ -762,6 +762,124 @@ func (w *Worker) getEthereumTypeAddressBalances(addrDesc bchain.AddressDescripto
 	return ba, tokens, ci, n, nonContractTxs, totalResults, nil
 }
 
+func (w *Worker) getEthereumTypeLiteAddressBalances(addrDesc bchain.AddressDescriptor, details AccountDetails, filter *AddressFilter) (*db.AddrBalance, []LiteToken, *bchain.Erc20Contract, uint64, int, int, error) {
+	var (
+		ba             *db.AddrBalance
+		tokens         []LiteToken
+		ci             *bchain.Erc20Contract
+		n              uint64
+		nonContractTxs int
+	)
+	// unknown number of results for paging
+	totalResults := -1
+	ca, err := w.db.GetAddrDescContracts(addrDesc)
+	if err != nil {
+		return nil, nil, nil, 0, 0, 0, NewAPIError(fmt.Sprintf("Address not found, %v", err), true)
+	}
+	b, err := w.chain.EthereumTypeGetBalance(addrDesc)
+	if err != nil {
+		return nil, nil, nil, 0, 0, 0, errors.Annotatef(err, "EthereumTypeGetBalance %v", addrDesc)
+	}
+	var filterDesc bchain.AddressDescriptor
+	if filter.Contract != "" {
+		filterDesc, err = w.chainParser.GetAddrDescFromAddress(filter.Contract)
+		if err != nil {
+			return nil, nil, nil, 0, 0, 0, NewAPIError(fmt.Sprintf("Invalid contract filter, %v", err), true)
+		}
+	}
+	if ca != nil {
+		ba = &db.AddrBalance{
+			Txs: uint32(ca.TotalTxs),
+		}
+		if b != nil {
+			ba.BalanceSat = *b
+		}
+		n, err = w.chain.EthereumTypeGetNonce(addrDesc)
+		if err != nil {
+			return nil, nil, nil, 0, 0, 0, errors.Annotatef(err, "EthereumTypeGetNonce %v", addrDesc)
+		}
+		if details > AccountDetailsBasic {
+			tokens = make([]LiteToken, len(ca.Contracts))
+			var j int
+			for i, c := range ca.Contracts {
+				if len(filterDesc) > 0 {
+					if !bytes.Equal(filterDesc, c.Contract) {
+						continue
+					}
+					// filter only transactions of this contract
+					filter.Vout = i + 1
+				}
+				t, err := w.getEthereumToken(i+1, addrDesc, c.Contract, details, int(c.Txs))
+				if err != nil {
+					return nil, nil, nil, 0, 0, 0, err
+				}
+				tokens[j] = LiteToken{
+					Contract:   t.Contract,
+					Symbol:     t.Symbol,
+					BalanceSat: t.BalanceSat,
+				}
+				j++
+			}
+			// special handling if filter has contract
+			// if the address has no transactions with given contract, check the balance, the address may have some balance even without transactions
+			if len(filterDesc) > 0 && j == 0 && details >= AccountDetailsTokens {
+				t, err := w.getEthereumToken(0, addrDesc, filterDesc, details, 0)
+				if err != nil {
+					return nil, nil, nil, 0, 0, 0, err
+				}
+				tokens = []LiteToken{{
+					Contract:   t.Contract,
+					Symbol:     t.Symbol,
+					BalanceSat: t.BalanceSat,
+				}}
+				// switch off query for transactions, there are no transactions
+				filter.Vout = AddressFilterVoutQueryNotNecessary
+			} else {
+				tokens = tokens[:j]
+			}
+		}
+		ci, err = w.chain.EthereumTypeGetErc20ContractInfo(addrDesc)
+		if err != nil {
+			return nil, nil, nil, 0, 0, 0, err
+		}
+		if filter.FromHeight == 0 && filter.ToHeight == 0 {
+			// compute total results for paging
+			if filter.Vout == AddressFilterVoutOff {
+				totalResults = int(ca.TotalTxs)
+			} else if filter.Vout == 0 {
+				totalResults = int(ca.NonContractTxs)
+			} else if filter.Vout > 0 && filter.Vout-1 < len(ca.Contracts) {
+				totalResults = int(ca.Contracts[filter.Vout-1].Txs)
+			} else if filter.Vout == AddressFilterVoutQueryNotNecessary {
+				totalResults = 0
+			}
+		}
+		nonContractTxs = int(ca.NonContractTxs)
+	} else {
+		// addresses without any normal transactions can have internal transactions and therefore balance
+		if b != nil {
+			ba = &db.AddrBalance{
+				BalanceSat: *b,
+			}
+		}
+		// special handling if filtering for a contract, check the ballance of it
+		if len(filterDesc) > 0 && details >= AccountDetailsTokens {
+			t, err := w.getEthereumToken(0, addrDesc, filterDesc, details, 0)
+			if err != nil {
+				return nil, nil, nil, 0, 0, 0, err
+			}
+			tokens = []LiteToken{{
+				Contract:   t.Contract,
+				Symbol:     t.Symbol,
+				BalanceSat: t.BalanceSat,
+			}}
+			// switch off query for transactions, there are no transactions
+			filter.Vout = AddressFilterVoutQueryNotNecessary
+		}
+	}
+	return ba, tokens, ci, n, nonContractTxs, totalResults, nil
+}
+
 func (w *Worker) txFromTxid(txid string, bestheight uint32, option AccountDetails, blockInfo *db.BlockInfo) (*Tx, error) {
 	var tx *Tx
 	var err error
@@ -961,6 +1079,75 @@ func (w *Worker) GetAddress(address string, page int, txsOnPage int, option Acco
 		Nonce:                 nonce,
 	}
 	glog.Info("GetAddress ", address, ", ", time.Since(start))
+	return r, nil
+}
+
+// GetLiteAddress computes address value and gets transactions for given address for ag_fix branch
+func (w *Worker) GetLiteAddress(address string, _ int, _ int, option AccountDetails, filter *AddressFilter) (*LiteAddress, error) {
+	start := time.Now()
+
+	var (
+		ba             *db.AddrBalance
+		tokens         []LiteToken
+		txm            []string
+		uBalSat        big.Int
+		unconfirmedTxs int
+	)
+	addrDesc, address, err := w.getAddrDescAndNormalizeAddress(address)
+	if err != nil {
+		return nil, err
+	}
+
+	if w.chainType == bchain.ChainEthereumType {
+		ba, tokens, _, _, _, _, err = w.getEthereumTypeLiteAddressBalances(addrDesc, option, filter)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// ba can be nil if the address is only in mempool!
+		ba, err = w.db.GetAddrDescBalance(addrDesc, db.AddressBalanceDetailNoUTXO)
+		if err != nil {
+			return nil, NewAPIError(fmt.Sprintf("Address not found, %v", err), true)
+		}
+	}
+
+	// if there are only unconfirmed transactions, there is no paging
+	if ba == nil {
+		ba = &db.AddrBalance{}
+	}
+	// process mempool, only if toHeight is not specified
+	if filter.ToHeight == 0 && !filter.OnlyConfirmed {
+		txm, err = w.getAddressTxids(addrDesc, true, filter, maxInt)
+		if err != nil {
+			return nil, errors.Annotatef(err, "getAddressTxids %v true", addrDesc)
+		}
+		for _, txid := range txm {
+			tx, err := w.GetTransaction(txid, false, true)
+			// mempool transaction may fail
+			if err != nil || tx == nil {
+				glog.Warning("GetTransaction in mempool: ", err)
+			} else {
+				// skip already confirmed txs, mempool may be out of sync
+				if tx.Confirmations == 0 {
+					unconfirmedTxs++
+					uBalSat.Add(&uBalSat, tx.getAddrVoutValue(addrDesc))
+					// ethereum has a different logic - value not in input and add maximum possible fees
+					if w.chainType == bchain.ChainEthereumType {
+						uBalSat.Sub(&uBalSat, tx.getAddrEthereumTypeMempoolInputValue(addrDesc))
+					} else {
+						uBalSat.Sub(&uBalSat, tx.getAddrVinValue(addrDesc))
+					}
+				}
+			}
+		}
+	}
+
+	r := &LiteAddress{
+		BalanceSat:            (*Amount)(&ba.BalanceSat),
+		UnconfirmedBalanceSat: (*Amount)(&uBalSat),
+		Tokens:                tokens,
+	}
+	glog.Info("GetLiteAddress ", address, ", ", time.Since(start))
 	return r, nil
 }
 

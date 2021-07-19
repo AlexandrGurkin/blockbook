@@ -157,6 +157,13 @@ type Token struct {
 	ContractIndex    string    `json:"-"`
 }
 
+// LiteToken contains cut info about tokens held by an address
+type LiteToken struct {
+	Contract   string  `json:"contract,omitempty"`
+	Symbol     string  `json:"symbol,omitempty"`
+	BalanceSat *Amount `json:"balance,omitempty"`
+}
+
 // TokenTransfer contains info about a token transfer done in a transaction
 type TokenTransfer struct {
 	Type     TokenType `json:"type"`
@@ -265,6 +272,16 @@ type Address struct {
 	UsedTokens            int                   `json:"usedTokens,omitempty"`
 	Tokens                []Token               `json:"tokens,omitempty"`
 	Erc20Contract         *bchain.Erc20Contract `json:"erc20Contract,omitempty"`
+	// helpers for explorer
+	Filter        string              `json:"-"`
+	XPubAddresses map[string]struct{} `json:"-"`
+}
+
+// LiteAddress holds information about address and its transactions for ag_fix branch
+type LiteAddress struct {
+	BalanceSat            *Amount     `json:"balance"`
+	UnconfirmedBalanceSat *Amount     `json:"unconfirmedBalance"`
+	Tokens                []LiteToken `json:"tokens,omitempty"`
 	// helpers for explorer
 	Filter        string              `json:"-"`
 	XPubAddresses map[string]struct{} `json:"-"`

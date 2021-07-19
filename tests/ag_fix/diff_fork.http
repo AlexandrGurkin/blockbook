@@ -1,0 +1,5 @@
+GET https://dogecoin.atomicwallet.io/api/v2/address/DMb8ySHJa4f4Zkv3WufQJoBWzH8UU2W8fo
+
+###
+
+GET https://localhost:9138/api/v2/lite-address/DMb8ySHJa4f4Zkv3WufQJoBWzH8UU2W8fo
