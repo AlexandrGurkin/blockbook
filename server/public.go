@@ -1022,7 +1022,7 @@ func (s *PublicServer) apiAddress(r *http.Request, apiVersion int) (interface{},
 	return address, err
 }
 
-func (s *PublicServer) apiLiteAddress(r *http.Request, _ int) (interface{}, error) {
+func (s *PublicServer) apiLiteAddress(r *http.Request, apiVersion int) (interface{}, error) {
 	var addressParam string
 	i := strings.LastIndexByte(r.URL.Path, '/')
 	if i > 0 {
@@ -1031,13 +1031,26 @@ func (s *PublicServer) apiLiteAddress(r *http.Request, _ int) (interface{}, erro
 	if len(addressParam) == 0 {
 		return nil, api.NewAPIError("Missing address", true)
 	}
-	var address *api.LiteAddress
-	var err error
-	s.metrics.ExplorerViews.With(common.Labels{"action": "api-address"}).Inc()
-	page, pageSize, details, filter, _, _ := s.getAddressQueryParams(r, api.AccountDetailsTxidHistory, txsInAPI)
-	address, err = s.api.GetLiteAddress(addressParam, page, pageSize, details, filter)
 
-	return address, err
+	if len(r.URL.Query()) == 0 {
+		var address *api.LiteAddress
+		var err error
+		s.metrics.ExplorerViews.With(common.Labels{"action": "api-address"}).Inc()
+		page, pageSize, details, filter, _, _ := s.getAddressQueryParams(r, api.AccountDetailsTxidHistory, txsInAPI)
+		address, err = s.api.GetLiteAddress(addressParam, page, pageSize, details, filter)
+
+		return address, err
+	} else {
+		var address *api.Address
+		var err error
+		s.metrics.ExplorerViews.With(common.Labels{"action": "api-full-address"}).Inc()
+		page, pageSize, details, filter, _, _ := s.getAddressQueryParams(r, api.AccountDetailsTxidHistory, txsInAPI)
+		address, err = s.api.GetAddress(addressParam, page, pageSize, details, filter)
+		if err == nil && apiVersion == apiV1 {
+			return s.api.AddressToV1(address), nil
+		}
+		return address, err
+	}
 }
 
 func (s *PublicServer) apiXpub(r *http.Request, apiVersion int) (interface{}, error) {
