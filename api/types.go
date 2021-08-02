@@ -159,8 +159,10 @@ type Token struct {
 
 // LiteToken contains cut info about tokens held by an address
 type LiteToken struct {
+	Name       string  `json:"name"`
 	Contract   string  `json:"contract,omitempty"`
 	Symbol     string  `json:"symbol,omitempty"`
+	Decimals   int     `json:"decimals,omitempty"`
 	BalanceSat *Amount `json:"balance,omitempty"`
 }
 

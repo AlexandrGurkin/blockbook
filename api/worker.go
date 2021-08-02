@@ -814,8 +814,10 @@ func (w *Worker) getEthereumTypeLiteAddressBalances(addrDesc bchain.AddressDescr
 					return nil, nil, nil, 0, 0, 0, err
 				}
 				tokens[j] = LiteToken{
+					Name:       t.Name,
 					Contract:   t.Contract,
 					Symbol:     t.Symbol,
+					Decimals:   t.Decimals,
 					BalanceSat: t.BalanceSat,
 				}
 				j++
@@ -828,8 +830,10 @@ func (w *Worker) getEthereumTypeLiteAddressBalances(addrDesc bchain.AddressDescr
 					return nil, nil, nil, 0, 0, 0, err
 				}
 				tokens = []LiteToken{{
+					Name:       t.Name,
 					Contract:   t.Contract,
 					Symbol:     t.Symbol,
+					Decimals:   t.Decimals,
 					BalanceSat: t.BalanceSat,
 				}}
 				// switch off query for transactions, there are no transactions
@@ -869,8 +873,10 @@ func (w *Worker) getEthereumTypeLiteAddressBalances(addrDesc bchain.AddressDescr
 				return nil, nil, nil, 0, 0, 0, err
 			}
 			tokens = []LiteToken{{
+				Name:       t.Name,
 				Contract:   t.Contract,
 				Symbol:     t.Symbol,
+				Decimals:   t.Decimals,
 				BalanceSat: t.BalanceSat,
 			}}
 			// switch off query for transactions, there are no transactions
